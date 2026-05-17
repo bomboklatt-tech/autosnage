@@ -76,6 +76,7 @@
       # system and lives only under `packages.<system>.vm`.
       nixosConfigurations = {
         rpi5 = mkHost "rpi5" "aarch64-linux";
+        rockpro64 = mkHost "rockpro64" "aarch64-linux";
       };
 
       packages = forAllSystems (
