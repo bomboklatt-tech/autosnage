@@ -1,5 +1,5 @@
 {
-  description = "autosnage - NixOS Raspberry Pi kiosk image with VM testing";
+  description = "autosnage - NixOS kiosk image with VM testing";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
@@ -13,6 +13,8 @@
       nixos-hardware,
     }:
     let
+      inherit (nixpkgs) lib;
+
       cfg = import ./config.nix;
 
       systems = [
@@ -22,22 +24,14 @@
         "x86_64-linux"
       ];
 
-      forAllSystems = nixpkgs.lib.genAttrs systems;
+      forAllSystems = lib.genAttrs systems;
 
       pkgsFor = system: import nixpkgs { inherit system; };
 
-      # Map a darwin system to its linux counterpart for build/host platform.
-      # Per the nixcademy cross-compile article: we evaluate on darwin but
-      # need a Linux platform string for builds.
+      # Map a darwin system to its linux counterpart. We evaluate on the user's
+      # platform but builds (NixOS, sdImage, VM kernel) need a Linux platform
+      # string. On darwin this resolves via nix.linux-builder.
       toLinux = builtins.replaceStrings [ "darwin" ] [ "linux" ];
-
-      # Same-arch linux system for "what arch is the VM targeting?".
-      linuxSysOf =
-        system:
-        let
-          arch = nixpkgs.lib.elemAt (nixpkgs.lib.splitString "-" system) 0;
-        in
-        "${arch}-linux";
 
       overlay = (
         final: prev:
@@ -52,58 +46,42 @@
         ./modules
       ];
 
-      piExtra = [
-        nixos-hardware.nixosModules."raspberry-pi-${cfg.pi.model}"
-        ./modules/pi.nix
-        "${nixpkgs}/nixos/modules/installer/sd-card/sd-image-aarch64.nix"
-      ];
+      # Auto-discover hosts/. A host is any sub-directory; its default.nix
+      # must set `system.build.target` to the artifact this flake should
+      # build (sdImage for hardware hosts, vm for the VM host).
+      hostNames = lib.attrNames (
+        lib.filterAttrs (_: type: type == "directory") (builtins.readDir ./hosts)
+      );
 
-      # qemu-vm.nix is auto-applied via build-vm.nix's `virtualisation.vmVariant`
-      # extendModules path (see nixos/modules/virtualisation/build-vm.nix). The
-      # generated `system.build.vm` is a runner script that direct-boots the
-      # guest kernel + initrd (no in-build install VM, no nested qemu). The
-      # script itself is built on the user's host platform via host.pkgs, so
-      # qemu runs natively on darwin (HVF) instead of TCG-on-aarch64-on-aarch64.
-      vmExtra = hostSystem: [
-        (
-          _: {
-            kiosk.vmMode = true;
-            virtualisation.vmVariant = {
-              virtualisation = {
-                host.pkgs = nixpkgs.legacyPackages.${hostSystem};
-                cores = cfg.vm.cores;
-                memorySize = cfg.vm.memorySize;
-                diskSize = cfg.vm.diskSize;
-                graphics = true;
-              };
-            };
-          }
-        )
-      ];
-
-      # Cross-compile-aware constructor. hostPlatform = where the image runs;
-      # buildPlatform = where the build happens. When they differ, nix uses
-      # cross-compile. When they match, it's a native build (potentially via
-      # a remote builder like nix.linux-builder on darwin).
-      mkSystem =
-        extraModules: hostPlatform: buildPlatform:
-        nixpkgs.lib.nixosSystem {
-          modules = commonModules ++ extraModules ++ [
-            { nixpkgs = { inherit hostPlatform buildPlatform; }; }
+      mkHost =
+        name: userSystem:
+        lib.nixosSystem {
+          modules = commonModules ++ [
+            ./hosts/${name}
+            { nixpkgs.buildPlatform = toLinux userSystem; }
           ];
-          specialArgs = { inherit cfg; };
+          specialArgs = {
+            inherit
+              cfg
+              nixpkgs
+              nixos-hardware
+              userSystem
+              ;
+          };
         };
     in
     {
-      # Canonical config = the Pi. Built outputs go through `packages`.
-      nixosConfigurations.autosnage = mkSystem piExtra cfg.pi.system cfg.pi.system;
+      # Inspection-only entry points for hosts whose target platform is
+      # fixed (i.e. real hardware). The VM is parametric on the user's
+      # system and lives only under `packages.<system>.vm`.
+      nixosConfigurations = {
+        rpi5 = mkHost "rpi5" "aarch64-linux";
+      };
 
-      packages = forAllSystems (system: {
-        sd-image =
-          (mkSystem piExtra "aarch64-linux" (toLinux system)).config.system.build.sdImage;
-        vm =
-          (mkSystem (vmExtra system) (linuxSysOf system) (toLinux system)).config.system.build.vm;
-      });
+      packages = forAllSystems (
+        system:
+        lib.genAttrs hostNames (name: (mkHost name system).config.system.build.target)
+      );
 
       devShells = forAllSystems (
         system:

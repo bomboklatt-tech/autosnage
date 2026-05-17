@@ -10,8 +10,9 @@
     type = lib.types.bool;
     default = false;
     description = ''
-      True when building the VM image, false for the real Pi. Set by the
-      vmExtra modules in flake.nix; modules read it via config.kiosk.vmMode.
+      True when building the VM host, false for real hardware. Set by
+      hosts/vm/default.nix; shared modules read it via config.kiosk.vmMode
+      to skip wifi, etc.
     '';
   };
 

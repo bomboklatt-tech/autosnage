@@ -1,0 +1,12 @@
+# nix build outputs
+result
+result-*
+
+# qemu-vm.nix runtime artifacts (created on first run-vm, default names)
+*.qcow2
+*-efi-vars.fd
+*-swtpm/
+
+# direnv / lorri
+.direnv/
+.envrc.local
