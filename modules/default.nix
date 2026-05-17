@@ -8,5 +8,6 @@
     ./hostname.nix
     ./kiosk.nix
     ./lean.nix
+    ./trim.nix
   ];
 }

@@ -35,9 +35,26 @@
 
       overlay = (
         final: prev:
-        prev.lib.packagesFromDirectoryRecursive {
+        (prev.lib.packagesFromDirectoryRecursive {
           inherit (prev) callPackage;
           directory = ./pkgs;
+        })
+        // {
+          # Massive closure win: SDL3 defaults pull libdecor (-> GTK4 ->
+          # libadwaita -> zenity), wayland, pipewire, pulseaudio, vulkan,
+          # ibus, jack, tray. Our kiosk uses X11 + KMSDRM only, no audio,
+          # no Wayland. dosbox-staging links via sdl2-compat -> sdl3, so
+          # this propagates through the full DOS chain.
+          sdl3 = prev.sdl3.override {
+            waylandSupport = false;
+            libdecorSupport = false;
+            pipewireSupport = false;
+            pulseaudioSupport = false;
+            ibusSupport = false;
+            jackSupport = false;
+            traySupport = false;
+            dbusSupport = false;
+          };
         }
       );
 

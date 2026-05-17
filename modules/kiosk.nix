@@ -26,7 +26,9 @@ in
   ];
   services.xserver.displayManager.startx.enable = true;
 
-  hardware.graphics.enable = true;
+  # hardware.graphics is disabled in modules/trim.nix; the modesetting and
+  # fbdev drivers above don't strictly need GL. If GL is ever required, flip
+  # `hardware.graphics.enable = lib.mkForce true;` here.
 
   services.getty.autologinUser = lib.mkDefault cfg.username;
 
