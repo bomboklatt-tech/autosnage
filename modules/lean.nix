@@ -1,7 +1,6 @@
 {
   lib,
   modulesPath,
-  config,
   ...
 }:
 
@@ -65,11 +64,9 @@
   nix.channel.enable = false;
   nix.nixPath = lib.mkForce [ ];
 
-  # Catch regressions: fail the build if anything pulls these back in.
-  # mkForce replaces perlless.nix's [ "perl" ] entirely so we can opt perl
-  # back in for the VM (grub's installer needs it, and the VM can't use
-  # systemd-boot without persistent EFI NVRAM - see flake.nix vmExtra).
-  system.forbiddenDependenciesRegexes = lib.mkForce (
-    [ "speech-dispatcher" ] ++ lib.optionals (!config.kiosk.vmMode) [ "perl" ]
-  );
+  # Catch regressions: fail the build if speech-dispatcher creeps back in.
+  # perl is accepted - xdg/gtk icon-cache machinery and rockpro64's u-boot
+  # both pull it transitively, and fighting that for marginal closure savings
+  # isn't worth the breakage.
+  system.forbiddenDependenciesRegexes = lib.mkForce [ "speech-dispatcher" ];
 }
